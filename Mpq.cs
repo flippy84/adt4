@@ -7,7 +7,6 @@ namespace adt4
     static class Mpq
     {
         const int MPQ_OPEN_READ_ONLY = 0x0100;
-        const int SFILE_OPEN_PATCHED_FILE = 0x00000001;
         static IntPtr handle;
 
         static Mpq()
@@ -23,7 +22,7 @@ namespace adt4
         public static IntPtr OpenFile(string filename)
         {
             IntPtr file;
-            SFileOpenFileEx(handle, filename, SFILE_OPEN_PATCHED_FILE, out file);
+            SFileOpenFileEx(handle, filename, 0, out file);
             return file;
         }
 
