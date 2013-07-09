@@ -26,6 +26,53 @@ namespace adt4
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    struct MH2O
+    {
+        public MH2OInfo info;
+        public MH2OHeader header;
+        public float[,] heights;
+        public long RenderMask;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MH2OInfo
+    {
+        public short type;
+        public short flags;
+        public float heightlevel1;
+        public float heightlevel2;
+        public byte x_offset;
+        public byte y_offset;
+        public byte width;
+        public byte height;
+        public int ofsMask2;
+        public int ofsHeightMap;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MH2OBlock
+    {
+        MH2OHeader header;
+        MH2OInfo info;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MH2OEntry
+    {
+        public int layeroffset;
+        public int layercount;
+        public int render;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MH2OHeader
+    {
+        public int layeroffset;
+        public int layercount;
+        public int render;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     struct MCIN
     {
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
@@ -64,20 +111,20 @@ namespace adt4
 
     struct Model
     {
-        public int id;
-        public string file;
-        public Vector3 position;
-        public Vector3 rotation;
-        public float scale;
+        public int Id;
+        public string File;
+        public Vector3 Position;
+        public Vector3 Rotation;
+        public float Scale;
     }
 
     public struct WMO
     {
-        public int id;
-        public string file;
-        public Vector3 position;
-        public Vector3 rotation;
-        public BoundingBox bounds;
-        public short doodadSet;
+        public int Id;
+        public string File;
+        public Vector3 Position;
+        public Vector3 Rotation;
+        public BoundingBox Bounds;
+        public short DoodadSet;
     }
 }

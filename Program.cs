@@ -15,12 +15,14 @@ namespace adt4
     {
         MCNK[] mcnk = new MCNK[256];
         MCVT[] mcvt = new MCVT[256];
+        MH2O[] mh2o = new MH2O[256];
         Obj obj;
         IntPtr file;
         MDDF mddf;
         string[] mmdx;
         MODF modf;
         string[] mwmo;
+        //MH2OInfo[] mh2o_i = new MH2OInfo[256];
 
         public Adt(string adt, Obj obj)
         {
@@ -56,20 +58,20 @@ namespace adt4
             b = Mpq.ReadFile(file, size);
             string hej = Encoding.Default.GetString(b);
             mmdx = hej.Split('\0');
-            Array.Resize<string>(ref mmdx, mmdx.Length - 1);
+            Array.Resize(ref mmdx, mmdx.Length - 1);
 
             Mpq.Seek(file, mhdr.mddf + 24);
             size = Read<int>(file);
 
             
-            mddf.entries = new MDDFEntry[size / 36];
+            mddf.Entries = new MDDFEntry[size / 36];
 
             for (int i = 0; i < size / 36; i++)
             {
                 b = Mpq.ReadFile(file, 36);
                 GCHandle pinnedArray = GCHandle.Alloc(b, GCHandleType.Pinned);
                 IntPtr addr = pinnedArray.AddrOfPinnedObject();
-                mddf.entries[i] = (MDDFEntry)Marshal.PtrToStructure(addr, typeof(MDDFEntry));
+                mddf.Entries[i] = (MDDFEntry)Marshal.PtrToStructure(addr, typeof(MDDFEntry));
                 pinnedArray.Free();
             }
 
@@ -80,20 +82,66 @@ namespace adt4
             b = Mpq.ReadFile(file, size);
             hej = Encoding.Default.GetString(b);
             mwmo = hej.Split('\0');
-            Array.Resize<string>(ref mwmo, mwmo.Length - 1);
+            Array.Resize(ref mwmo, mwmo.Length - 1);
 
             Mpq.Seek(file, mhdr.modf + 24);
             size = Read<int>(file);
 
-            modf.entries = new MODFEntry[size / 64];
+            modf.Entries = new MODFEntry[size / 64];
 
             for (int i = 0; i < size / 64; i++)
             {
                 b = Mpq.ReadFile(file, 64);
                 GCHandle pinnedArray = GCHandle.Alloc(b, GCHandleType.Pinned);
                 IntPtr addr = pinnedArray.AddrOfPinnedObject();
-                modf.entries[i] = (MODFEntry)Marshal.PtrToStructure(addr, typeof(MODFEntry));
+                modf.Entries[i] = (MODFEntry)Marshal.PtrToStructure(addr, typeof(MODFEntry));
                 pinnedArray.Free();
+            }
+
+            //Water
+
+            if (mhdr.mh2o == 0)
+                return;
+            Mpq.Seek(file, mhdr.mh2o + 28);
+            //MH2O mh2o = Mpq.ReadChunk<MH2O>(file);
+
+            for (int i = 0; i < 256; i++)
+            {
+                mh2o[i].header = Mpq.ReadStruct<MH2OHeader>(file);
+            }
+
+            for (int i = 0; i < 256; i++)
+            {
+                if (mh2o[i].header.layercount > 0)
+                {
+                    Mpq.Seek(file, mhdr.mh2o + 28 + mh2o[i].header.layeroffset);
+                    mh2o[i].info = Mpq.ReadStruct<MH2OInfo>(file);
+                    Mpq.Seek(file, mhdr.mh2o + 28 + mh2o[i].info.ofsHeightMap);
+                    mh2o[i].heights = new float[8, 8];
+
+                    /*if(mh2o[i].info.type == 2)
+                        continue;
+                    if(mh2o[i].info.ofsHeightMap == 0)
+                        continue;*/
+
+                    for (int y = mh2o[i].info.y_offset; y < mh2o[i].info.height + mh2o[i].info.y_offset; y++)
+                    {
+                        for (int x = mh2o[i].info.x_offset; x < mh2o[i].info.width + mh2o[i].info.x_offset; x++)
+                        {
+                            mh2o[i].heights[x, y] = Mpq.Read<float>(file);
+                        }
+                    }
+
+                    if (mh2o[i].header.render == 0)
+                    {
+                        mh2o[i].RenderMask = long.MaxValue;
+                        continue;
+                    }
+
+                    Mpq.Seek(file, mhdr.mh2o + 28 + mh2o[i].header.render);
+                    
+                    mh2o[i].RenderMask = Mpq.Read<long>(file);
+                }
             }
         }
 
@@ -101,21 +149,21 @@ namespace adt4
         {
             List<Model> hej = new List<Model>();
 
-            foreach (int i in models)
+            foreach (int i in Models)
             {
                 Model balle;
-                balle.id = mddf.entries[i].uniqueId;
-                balle.file = mmdx[mddf.entries[i].mmidEntry];
-                balle.position = new Vector3(mddf.entries[i].position[0], mddf.entries[i].position[1], mddf.entries[i].position[2]);
-                balle.rotation = new Vector3(mddf.entries[i].rotation[0], mddf.entries[i].rotation[1], mddf.entries[i].rotation[2]);
-                balle.scale = mddf.entries[i].scale / 1024.0f;
+                balle.Id = mddf.Entries[i].uniqueId;
+                balle.File = mmdx[mddf.Entries[i].mmidEntry];
+                balle.Position = new Vector3(mddf.Entries[i].position[0], mddf.Entries[i].position[1], mddf.Entries[i].position[2]);
+                balle.Rotation = new Vector3(mddf.Entries[i].rotation[0], mddf.Entries[i].rotation[1], mddf.Entries[i].rotation[2]);
+                balle.Scale = mddf.Entries[i].scale / 1024.0f;
                 hej.Add(balle);
             }
 
             return hej.ToArray();
         }
 
-        static Vector3 floatToVector(float[] f)
+        static Vector3 FloatToVector(float[] f)
         {
             return new Vector3(f[0], f[1], f[2]);
         }
@@ -127,39 +175,62 @@ namespace adt4
             foreach (int i in wmos)
             {
                 WMO balle;
-                balle.id = modf.entries[i].uniqueId;
-                balle.file = mwmo[modf.entries[i].mwidEntry];
-                balle.position = floatToVector(modf.entries[i].position);
-                balle.rotation = floatToVector(modf.entries[i].rotation);
+                balle.Id = modf.Entries[i].UniqueId;
+                balle.File = mwmo[modf.Entries[i].MwidEntry];
+                balle.Position = FloatToVector(modf.Entries[i].Position);
+                balle.Rotation = FloatToVector(modf.Entries[i].Rotation);
                 
-                balle.bounds = new BoundingBox(floatToVector(modf.entries[i].lowerBounds), floatToVector(modf.entries[i].upperBounds));
-                balle.bounds.Min.X -= 51200 / 3f;
-                balle.bounds.Min.Z -= 51200 / 3f;
-                balle.bounds.Max.X -= 51200 / 3f;
-                balle.bounds.Max.Z -= 51200 / 3f;
+                balle.Bounds = new BoundingBox(FloatToVector(modf.Entries[i].LowerBounds), FloatToVector(modf.Entries[i].UpperBounds));
+                balle.Bounds.Min.X -= 51200 / 3f;
+                balle.Bounds.Min.Z -= 51200 / 3f;
+                balle.Bounds.Max.X -= 51200 / 3f;
+                balle.Bounds.Max.Z -= 51200 / 3f;
 
-                balle.position.X -= 51200f / 3;
-                balle.position.Z -= 51200f / 3;
+                balle.Position.X -= 51200f / 3;
+                balle.Position.Z -= 51200f / 3;
 
-                balle.doodadSet = modf.entries[i].doodadSet;
+                balle.DoodadSet = modf.Entries[i].DoodadSet;
                 hej.Add(balle);
             }
             return hej.ToArray();
         }
 
-        public List<int> models = new List<int>();
+        public List<int> Models = new List<int>();
 
-        public void AddChunk(int x, int y)
+        public void AddChunk(int _x, int _y)
         {
             if (file == IntPtr.Zero)
                 return;
 
-            MCNK m = mcnk[y * 16 + x];
-            MCVT h = mcvt[y * 16 + x];
+            MCNK m = mcnk[_y * 16 + _x];
+            MCVT h = mcvt[_y * 16 + _x];
+            MH2O o = mh2o[_y * 16 + _x];
             int l = 0;
             Vector3[] v = new Vector3[145];
             List<int> i = new List<int>();
             double step = 1600.0 / 768.0;
+            Vector3[] v2 = new Vector3[10];
+
+            const float kuk = 25f / 6;
+
+            Vector3[,] MiddlePositions = new Vector3[8, 8];
+            Vector3[,] OuterPositions = new Vector3[9, 9];
+
+            for (int y = 0; y < 9; y++)
+            {
+                for (int x = 0; x < 9; x++)
+                {
+                    OuterPositions[x, y] = new Vector3(x * kuk - m.position[1], h.z[y * 17 + x] + m.position[2], y * kuk - m.position[0]);
+                }
+            }
+
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 8; x++)
+                {
+                    MiddlePositions[x, y] = new Vector3(x * kuk - m.position[1] + kuk / 2, h.z[y * 17 + 9 + x] + m.position[2], y * kuk - m.position[0] + kuk / 2);
+                }
+            }
 
             for (int k = 0; k < 8; k++)
             {
@@ -196,6 +267,55 @@ namespace adt4
                 v[j].Z += -m.position[0];
             }
 
+            //Water
+
+            List<Vector3> water_v = new List<Vector3>();
+            List<int> water_i = new List<int>();
+
+            float[,] neger = new float[,]
+            {
+                { 0, 2 },
+                { 2, 0 }
+            };
+
+            if (o.header.layercount > 0)
+            {
+                for (int y = o.info.y_offset; y < o.info.height + o.info.y_offset; y++)
+                {
+                    for (int x = o.info.x_offset; x < o.info.width + o.info.x_offset; x++)
+                    {
+                        /*if ((o.RenderMask >> y * 8 >> x & 1) == 0)
+                            continue;*/
+
+
+                        //o.heights[x, y] = 0;
+
+                        //o.heights[x, y] = neger[_x % 2, _y % 2];
+
+                        water_v.AddRange(new[]
+                        {
+                            new Vector3(OuterPositions[x, y].X, o.heights[x, y], OuterPositions[x, y].Z),
+                            new Vector3(OuterPositions[x + 1, y].X, o.heights[x, y], OuterPositions[x + 1, y].Z),
+                            new Vector3(OuterPositions[x, y + 1].X, o.heights[x, y], OuterPositions[x, y + 1].Z),
+                            new Vector3(OuterPositions[x + 1, y + 1].X, o.heights[x, y], OuterPositions[x + 1, y + 1].Z)
+                        });
+
+                        int c = water_v.Count - 4;
+
+                        //Console.Write("{0} ", o.info.type);
+                        //Console.Write("0x{0:X} ", o.info.flags);
+
+                        water_i.AddRange(new[]
+                        {
+                            3 + c, 2 + c, 1 + c,
+                            3 + c, 4 + c, 2 + c
+                        });
+                    }
+                }
+            }
+
+            obj.Add(water_v.ToArray(), water_i.ToArray());
+
             //Holes
 
             for (int cy = 0; cy < 4; cy++)
@@ -223,17 +343,17 @@ namespace adt4
             for (int j = 0; j < m.nDoodadRefs; j++)
             {
                 int model = Mpq.Read<int>(file);
-                int id = mddf.entries[model].uniqueId;
-                if (!models.Contains(model))
+                int id = mddf.Entries[model].uniqueId;
+                if (!Models.Contains(model))
                 {
-                    models.Add(model);
+                    Models.Add(model);
                 }
             }
 
             for (int j = 0; j < m.nMapObjRefs; j++)
             {
                 int mapobj = Mpq.Read<int>(file);
-                int id = modf.entries[mapobj].uniqueId;
+                int id = modf.Entries[mapobj].UniqueId;
                 if(!wmos.Contains(mapobj))
                 {
                     wmos.Add(mapobj);
@@ -266,13 +386,11 @@ namespace adt4
             GCHandle pinnedArray;
             IntPtr addr;
             T type = new T();
-            string id;
 
             b = Mpq.ReadFile(h, 4);
 
             Array.Reverse(b);
-            id = Encoding.Default.GetString(b);
-            
+
             b = Mpq.ReadFile(h, 4);
             size = BitConverter.ToInt32(b, 0);
 
@@ -289,30 +407,30 @@ namespace adt4
 
     struct MODF
     {
-        public MODFEntry[] entries;
+        public MODFEntry[] Entries;
     }
 
     struct MODFEntry
     {
-        public int mwidEntry;           // references an entry in the MWID chunk, specifying the model to use.
-        public int uniqueId;            // this ID should be unique for all ADTs currently loaded. Best, they are unique for the whole map.
+        public int MwidEntry;           // references an entry in the MWID chunk, specifying the model to use.
+        public int UniqueId;            // this ID should be unique for all ADTs currently loaded. Best, they are unique for the whole map.
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
-        public float[] position;
+        public float[] Position;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
-        public float[] rotation;            // same as in MDDF.
+        public float[] Rotation;            // same as in MDDF.
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
-        public float[] lowerBounds;         // these two are position plus the wmo bounding box.
+        public float[] LowerBounds;         // these two are position plus the wmo bounding box.
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 3)]
-        public float[] upperBounds;         // they are used for defining when if they are rendered as well as collision.
-        public short flags;               // values from enum MODFFlags.
-        public short doodadSet;           // which WMO doodad set is used.
-        public short nameSet;             // which WMO name set is used. Used for renaming goldshire inn to northshire inn while using the same model.
-        public short padding;             // it reads only a WORD into the WMAPOBJDEF structure for name. I don't know about the rest.
+        public float[] UpperBounds;         // they are used for defining when if they are rendered as well as collision.
+        public short Flags;               // values from enum MODFFlags.
+        public short DoodadSet;           // which WMO doodad set is used.
+        public short NameSet;             // which WMO name set is used. Used for renaming goldshire inn to northshire inn while using the same model.
+        short _padding;             // it reads only a WORD into the WMAPOBJDEF structure for name. I don't know about the rest.
     }
 
     struct MDDF
     {
-        public MDDFEntry[] entries;
+        public MDDFEntry[] Entries;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -337,10 +455,23 @@ namespace adt4
         public int asyncId;
     };
 
+    struct Settings
+    {
+        public bool Doodad;
+        public bool Wmo;
+        public bool Terrain;
+        public bool Water;
+    }
+
     class Program
     {
         static Obj obj = new Obj();
         static BoundingBox bbox;// = new BoundingBox(new Vector3(-1600 / 48f, float.MinValue, 8500f), new Vector3(1600 / 3f, float.MaxValue, 9100f));
+
+        static Settings settings = new Settings
+        {
+            Terrain = true
+        };
 
         static void Main(string[] args)
         {
@@ -410,7 +541,7 @@ namespace adt4
                 new Adt(string.Format("{0}_{1}_{2}.adt", map, x - 1, y - 1), obj),
                 new Adt(string.Format("{0}_{1}_{2}.adt", map, x + 1, y - 1), obj),
                 new Adt(string.Format("{0}_{1}_{2}.adt", map, x - 1, y + 1), obj),
-                new Adt(string.Format("{0}_{1}_{2}.adt", map, x + 1, y + 1), obj),
+                new Adt(string.Format("{0}_{1}_{2}.adt", map, x + 1, y + 1), obj)
             };
 
             corners[0].AddChunk(15, 15);
@@ -439,7 +570,7 @@ namespace adt4
 
             foreach (Model i in m)
             {
-                AddModel(i.file, i.position, i.rotation, i.scale);
+                AddModel(i.File, i.Position, i.Rotation, i.Scale);
             }
             Console.WriteLine("Added {0} model{1}", m.Length, m.Length == 1 ? "" : "s");
         }
@@ -451,13 +582,13 @@ namespace adt4
             for (int i = 0; i < wmo.Length; i++)
             {
                 AddWMO(wmo[i]);
-                Console.WriteLine("({0}/{1}) {2}", i + 1, wmo.Length, wmo[i].file);
+                Console.WriteLine("({0}/{1}) {2}", i + 1, wmo.Length, wmo[i].File);
             }
         }
 
         static void AddWMO(WMO w)
         {
-            IntPtr file = Mpq.OpenFile(w.file);
+            IntPtr file = Mpq.OpenFile(w.File);
 
             //Console.WriteLine(w.file);
             byte[] b;
@@ -539,13 +670,13 @@ namespace adt4
                 modd[i].model = modd[i].model.Split('.')[0] + ".M2";
             }
 
-            for (int i = mods[w.doodadSet].start; i < mods[w.doodadSet].count; i++)
+            for (int i = mods[w.DoodadSet].start; i < mods[w.DoodadSet].count; i++)
             {
                 Quaternion q = new Quaternion(modd[i].rotation[0], modd[i].rotation[1], modd[i].rotation[2], modd[i].rotation[3]);
                 AddModel(modd[i].model, floatToVector(modd[i].positon), q, modd[i].scale, w);
             }
 
-            string group = w.file.Split('.')[0];
+            string group = w.File.Split('.')[0];
 
             for (int i = 0; i < mohd.nGroups; i++)
             {
@@ -624,9 +755,9 @@ namespace adt4
             float j = (float)(Math.PI / 2);
 
             Matrix m = Matrix.Identity;
-            m = Matrix.Multiply(m, Matrix.CreateRotationX(w.rotation.Z * d - j));
-            m = Matrix.Multiply(m, Matrix.CreateRotationY(w.rotation.Y * d - j));
-            m = Matrix.Multiply(m, Matrix.CreateRotationZ(-w.rotation.X * d));
+            m = Matrix.Multiply(m, Matrix.CreateRotationX(w.Rotation.Z * d - j));
+            m = Matrix.Multiply(m, Matrix.CreateRotationY(w.Rotation.Y * d - j));
+            m = Matrix.Multiply(m, Matrix.CreateRotationZ(-w.Rotation.X * d));
 
             Vector3 v;
 
@@ -637,7 +768,7 @@ namespace adt4
                 v = floatToVector(vertex);
 
                 v = Vector3.Transform(v, m);
-                v += w.position;
+                v += w.Position;
 
                 vertices.Add(v);
             }
@@ -887,9 +1018,9 @@ namespace adt4
             float j = (float)(Math.PI / 2);
 
             Matrix m = Matrix.Identity;
-            m = Matrix.Multiply(m, Matrix.CreateRotationX(w.rotation.X*d));
-            m = Matrix.Multiply(m, Matrix.CreateRotationY(w.rotation.Y*d));
-            m = Matrix.Multiply(m, Matrix.CreateRotationZ(w.rotation.Z*d));
+            m = Matrix.Multiply(m, Matrix.CreateRotationX(w.Rotation.X*d));
+            m = Matrix.Multiply(m, Matrix.CreateRotationY(w.Rotation.Y*d));
+            m = Matrix.Multiply(m, Matrix.CreateRotationZ(w.Rotation.Z*d));
 
             for (int i = 0; i < v.Count; i++)
             {
@@ -907,7 +1038,7 @@ namespace adt4
                 v[i] += new Vector3(pos.Y, pos.Z, pos.X);
                 v[i] = Vector3.Transform(v[i], m);
 
-                v[i] += w.position;
+                v[i] += w.Position;
             }
 
             int[] tmp = new int[indices.Length];

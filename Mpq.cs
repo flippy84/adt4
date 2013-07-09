@@ -49,10 +49,32 @@ namespace adt4
                 case TypeCode.Int32:
                     ret = BitConverter.ToInt32(Mpq.ReadFile(h, 4), 0);
                     break;
+                case TypeCode.Int64:
+                    ret = BitConverter.ToInt64(Mpq.ReadFile(h, 8), 0);
+                    break;
+                case TypeCode.Single:
+                    ret = BitConverter.ToSingle(Mpq.ReadFile(h, 4), 0);
+                    break;
+                case TypeCode.Byte:
+                    ret = Mpq.ReadFile(h, 1)[0];
+                    break;
                 default:
                     throw new NotSupportedException(typeof(T).FullName + " is not currently supported by Read<T>");
             }
             return (T)ret;
+        }
+
+        public static T ReadStruct<T>(IntPtr h) where T : new()
+        {
+            T ret = new T();
+            int size = Marshal.SizeOf(ret);
+            Byte[] b = Mpq.ReadFile(h, size);
+            GCHandle pinnedArray = GCHandle.Alloc(b, GCHandleType.Pinned);
+            IntPtr addr = pinnedArray.AddrOfPinnedObject();
+            ret = (T)Marshal.PtrToStructure(addr, typeof(T));
+            pinnedArray.Free();
+
+            return ret;
         }
 
         public static T ReadChunk<T>(IntPtr h) where T : new()
